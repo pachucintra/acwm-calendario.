@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ACWM - Eventos corporativos</title>
+
+  <!-- FullCalendar -->
+  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
+
+  <style>
+    body {
+      font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial;
+      margin: 0; padding: 20px; background: #f5f7fa; color: #222;
+    }
+    header {
+      text-align: center; margin-bottom: 14px;
+    }
+    header h1 {
+      color: #2e7d32; /* verde */
+      margin: 0; font-size: 20px;
+    }
+    #reloadBtn {
+      display: block;
+      margin: 0 auto 12px auto;
+      padding: 8px 16px;
+      background: #2e7d32;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+      box-shadow: 0 4px 12px rgba(46, 125, 50, 0.3);
+      transition: background-color 0.3s ease;
+    }
+    #reloadBtn:hover {
+      background: #145214;
+    }
+    #calendar {
+      max-width: 1100px;
+      margin: 0 auto;
+      background: white;
+      padding: 12px;
+      border-radius: 10px;
+      box-shadow: 0 6px 18px rgba(20,20,40,0.06);
+      height: auto;
+    }
+    .fc-toolbar-title {
+      text-transform: uppercase;
+    }
+    .fc-event {
+      cursor: pointer;
+      background: linear-gradient(135deg, #4caf50 0%, #81c784 100%);
+      border: none !important;
+      color: white !important;
+      font-weight: 600;
+      border-radius: 8px;
+      box-shadow: 0 4px 8px rgba(46, 125, 50, 0.3);
+      transition: box-shadow 0.3s ease, transform 0.3s ease;
+    }
+    .fc-event:hover {
+      box-shadow: 0 8px 20px rgba(46, 125, 50, 0.6);
+      transform: scale(1.05);
+      z-index: 10;
+    }
+    .small {
+      text-align: center;
+      color: #666;
+      font-size: 13px;
+      margin-top: 6px;
+    }
+    /* Modal */
+    #eventModal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      pointer-events: none;
+    }
+    #eventModal.show {
+      display: flex;
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #eventModal .card {
+      background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+      border: 1px solid #2e7d32aa;
+      padding: 18px;
+      border-radius: 10px;
+      width: 320px;
+      box-shadow: 0 20px 40px rgba(46, 125, 50, 0.3);
+      transform: translateY(-10px);
+      transition: transform 0.3s ease;
+    }
+    #eventModal.show .card {
+      transform: translateY(0);
+    }
+    #eventModal h3 {
+      margin: 0 0 6px 0;
+      color: #2e7d32;
+    }
+    .closeBtn {
+      float: right;
+      cursor: pointer;
+      font-size: 28px;
+      color: #2e7d32;
+      transition: color 0.25s ease;
+      user-select: none;
+    }
+    .closeBtn:hover {
+      color: #145214;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>ACWM - Eventos corporativos</h1>
+    <div class="small">Los eventos se cargan desde Google Sheets público.</div>
+  </header>
+
+  <button id="reloadBtn">🔄 Recargar eventos</button>
+
+  <div id="calendar"></div>
+
+  <!-- Modal evento -->
+  <div id="eventModal">
+    <div class="card">
+      <span class="closeBtn" id="closeModal">&times;</span>
+      <h3 id="modalTitle"></h3>
+      <div id="modalDate" style="color:#444; margin-bottom:8px;"></div>
+      <div id="modalDesc" style="white-space: pre-wrap; color:#333;"></div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      const GOOGLE_SHEET_CSV_URL = 'https://corsproxy.io/?https://docs.google.com/spreadsheets/d/e/2PACX-1vQ_JtYFVyD3mEJZ8npxIBZ2mcQtq3hof7uUS-Z_WMUpXD_82Hgib0lkNKq4t_Ex56c6EtfeL6mxrNg2/pub?gid=0&single=true&output=csv';
+
+      const calendarEl = document.getElementById('calendar');
+      const modal = document.getElementById('eventModal');
+      const closeModalBtn = document.getElementById('closeModal');
+      const reloadBtn = document.getElementById('reloadBtn');
+
+      const calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'dayGridMonth',
+        locale: 'es',
+        headerToolbar: {
+          left: 'prev,next today',
+          center: 'title',
+          right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek'
+        },
+        height: 'auto',
+        events: []
+      });
+
+      calendar.render();
+
+      closeModalBtn.addEventListener('click', () => {
+        modal.classList.remove('show');
+      });
+
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.classList.remove('show');
+      });
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') modal.classList.remove('show');
+      });
+
+      calendar.on('eventClick', function(info) {
+        const ev = info.event;
+        document.getElementById('modalTitle').innerText = ev.title || '';
+        document.getElementById('modalDate').innerText = ev.start ? ev.start.toLocaleDateString('es-ES', { weekday:'long', year:'numeric', month:'long', day:'numeric' }) : '';
+        document.getElementById('modalDesc').innerText = ev.extendedProps.description || '';
+        modal.classList.add('show');
+      });
+
+      // Función para parsear fechas yyyy-mm-dd o dd/mm/yyyy
+      function parseDateValue(v){
+        if(!v) return null;
+        const isoDate = /^\d{4}-\d{2}-\d{2}$/;
+        if(isoDate.test(v)) return v;
+        const dmY = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
+        const match = v.match(dmY);
+        if(match){
+          let day = match[1].padStart(2,'0');
+          let month = match[2].padStart(2,'0');
+          let year = match[3];
+          return `${year}-${month}-${day}`;
+        }
+        return null;
+      }
+
+      async function cargarEventosDesdeGoogleSheet(urlCSV) {
+        try {
+          const resp = await fetch(urlCSV);
+          const text = await resp.text();
+
+          const lines = text.trim().split('\n');
+          const headers = lines[0].split(',');
+
+          const events = [];
+
+          for(let i=1; i<lines.length; i++){
+            const cols = lines[i].split(',');
+
+            const row = {};
+            headers.forEach((h, idx) => {
+              row[h.trim()] = cols[idx] ? cols[idx].trim() : '';
+            });
+
+            const start = parseDateValue(row['Fecha']);
+            if(start){
+              events.push({
+                title: row['Título'] || 'Sin título',
+                start,
+                extendedProps: { description: row['Descripción'] || '' }
+              });
+            }
+          }
+
+          calendar.getEventSources().forEach(src => src.remove());
+          calendar.addEventSource(events);
+
+          if(events.length === 0){
+            alert('No se encontraron eventos válidos en el Google Sheet. Verificá los encabezados y los datos.');
+          }
+        } catch(err) {
+          console.error('Error cargando eventos:', err);
+          alert('Error cargando eventos desde Google Sheets. Revisá la consola.');
+        }
+      }
+
+      // Carga inicial
+      cargarEventosDesdeGoogleSheet(GOOGLE_SHEET_CSV_URL);
+
+      // Botón recargar
+      reloadBtn.addEventListener('click', () => {
+        cargarEventosDesdeGoogleSheet(GOOGLE_SHEET_CSV_URL);
+      });
+
+    });
+  </script>
+
+</body>
+</html>
